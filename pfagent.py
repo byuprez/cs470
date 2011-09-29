@@ -8,8 +8,8 @@ from mybzrc import MyBZRC, Command
 class BZRException(Exception): pass
 
 #Variables for frobbing the PD controller
-PD_Kp = 0
-PD_Kd = 0
+PD_Kp = 5
+PD_Kd = 1
 
 #Base class of all objects in our world that can produce a potential field,
 #like a flag, enemy tank, bullet, etc.
@@ -33,7 +33,7 @@ class EnemyTank(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 		
 		
 class FriendlyTank(FieldGenerator):
@@ -50,7 +50,7 @@ class FriendlyTank(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 		
 		
 class EnemyBase(FieldGenerator):
@@ -70,7 +70,7 @@ class EnemyBase(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 		
 		
 class FriendlyBase(FieldGenerator):
@@ -90,7 +90,7 @@ class FriendlyBase(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 		
 		
 class EnemyFlag(FieldGenerator):
@@ -106,7 +106,7 @@ class EnemyFlag(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 		
 		
 class FriendlyFlag(FieldGenerator):
@@ -122,7 +122,7 @@ class FriendlyFlag(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 		
 		
 class Shot(FieldGenerator):
@@ -137,7 +137,7 @@ class Shot(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 		
 		
 class Obstacle(FieldGenerator):
@@ -150,7 +150,7 @@ class Obstacle(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		pass
+		return 1,1
 
 
 class PFAgent:
@@ -176,7 +176,7 @@ class PFAgent:
 		#Calculate the potential field at my location
 		field_x, field_y = self.calculate_pf(myself.x, myself.y)
 		#Perform an action based on the potential field
-		self.perform_action(field_x, field_y)
+		self.perform_action(field_x, field_y, time_diff)
 		
 		
 	#Applies a PD controller to a goal, and returns the action and new error.
@@ -250,9 +250,17 @@ class PFAgent:
 		
 	#Performs the action based on the potential field calculated (delta_x, delta_y)
 	#A PD controller is applied to the desired angle to produce an angular velocity
-	def perform_action(self, delta_x, delta_y):
-		pass
+	def perform_action(self, delta_x, delta_y, time_diff):
+		velocity = math.sqrt(delta_x**2 + delta_y**2)
+		theta = math.atan2(delta_y, delta_x)
+		myself = self.bzrc.get_mytanks()[self.tank_index]
 		
+		angvel, self.pd_error = self.pd_controller(theta, myself.angle, self.pd_error, time_diff, PD_Kp, PD_Kd)
+		
+		
+		print "Command: velocity: {0} angvel: {1}".format(velocity, angvel)
+		command = [Command(self.tank_index, velocity, angvel, False)]
+		self.bzrc.do_commands(command)
 
 if __name__ == '__main__':
 	# Process CLI arguments.
