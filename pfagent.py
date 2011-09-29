@@ -17,6 +17,15 @@ class FieldGenerator:
 	#Generates a field for the given x,y position
 	def generate_field(self, x, y):
 		pass
+		
+	def generate_attractive(self, x, y):
+		pass
+		
+	def generate_repulsive(self, x, y):
+		pass
+		
+	def generate_tangential(self, x, y):
+		pass
 
 
 class EnemyTank(FieldGenerator):
@@ -33,7 +42,7 @@ class EnemyTank(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return 0,0
 		
 		
 class FriendlyTank(FieldGenerator):
@@ -50,7 +59,7 @@ class FriendlyTank(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return 0,0
 		
 		
 class EnemyBase(FieldGenerator):
@@ -70,7 +79,7 @@ class EnemyBase(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return 0,0
 		
 		
 class FriendlyBase(FieldGenerator):
@@ -90,7 +99,7 @@ class FriendlyBase(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return 0,0
 		
 		
 class EnemyFlag(FieldGenerator):
@@ -100,14 +109,30 @@ class EnemyFlag(FieldGenerator):
 		self.poss_team = flag.poss_color
 		self.radius = radius
 		#These variables can be used for frobbing the field
-		self.spread = 0
-		self.alpha = 0 #Attractive field strength
+		self.spread = 100
+		self.alpha = 1.5 #Attractive field strength
 		self.beta = 0 #Repulsive field strength
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return self.generate_attractive(x,y)
 		
+	def generate_attractive(self, x, y):
+		dist = math.sqrt((self.pos_x - x)**2 + (self.pos_y - y)**2)
+		theta = math.atan2(self.pos_y - y, self.pos_x - x)
+		
+		if dist < self.radius:
+			return 0,0
+			
+		elif self.radius <= dist and dist <= self.spread + self.radius:
+			x = self.alpha * (dist - self.radius) * math.cos(theta)
+			y = self.alpha * (dist - self.radius) * math.sin(theta)
+			return x,y
+			
+		elif dist > self.spread + self.radius:
+			x = self.alpha * self.spread * math.cos(theta)
+			y = self.alpha * self.spread * math.sin(theta)
+			return x,y
 		
 class FriendlyFlag(FieldGenerator):
 	def __init__(self, flag, radius):
@@ -122,7 +147,7 @@ class FriendlyFlag(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return 0,0
 		
 		
 class Shot(FieldGenerator):
@@ -137,7 +162,7 @@ class Shot(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return 0,0
 		
 		
 class Obstacle(FieldGenerator):
@@ -150,7 +175,7 @@ class Obstacle(FieldGenerator):
 		self.gamma = 0 #Tangential field strength
 		
 	def generate_field(self, x, y):
-		return 1,1
+		return 0,0
 
 
 class PFAgent:
@@ -226,16 +251,17 @@ class PFAgent:
 			#each enemy flag
 			for flag in flags:
 				if flag.color != self.constants['team']:
-					sub_fields.append(EnemyFlag(flag, self.constants['flagradius']))
+					sub_fields.append(EnemyFlag(flag, float(self.constants['flagradius'])))
+					break
 
 		#Add in fields for enemy tanks
 		for tank in othertanks:
-			sub_fields.append(EnemyTank(tank, self.constants['tankradius']))
+			sub_fields.append(EnemyTank(tank, float(self.constants['tankradius'])))
 
 		#Add in fields for friendly tanks
 		for tank in mytanks:
 			if tank.index != self.tank_index:
-				sub_fields.append(FriendlyTank(tank, self.constants['tankradius']))
+				sub_fields.append(FriendlyTank(tank, float(self.constants['tankradius'])))
 
 		#Avoid obstacles
 		for obstacle in obstacles:
@@ -243,7 +269,7 @@ class PFAgent:
 
 		#Avoid shots
 		for shot in shots:
-			subFields.append(Shot(shot, self.constants['shotradius']))
+			subFields.append(Shot(shot, float(self.constants['shotradius'])))
 
 		return sub_fields	
 		
@@ -251,12 +277,12 @@ class PFAgent:
 	#Performs the action based on the potential field calculated (delta_x, delta_y)
 	#A PD controller is applied to the desired angle to produce an angular velocity
 	def perform_action(self, delta_x, delta_y, time_diff):
-		velocity = math.sqrt(delta_x**2 + delta_y**2)
-		theta = math.atan2(delta_y, delta_x)
 		myself = self.bzrc.get_mytanks()[self.tank_index]
 		
+		#Calculate the velocity and angular velocity to do
+		velocity = math.sqrt(delta_x**2 + delta_y**2)
+		theta = math.atan2(delta_y, delta_x)
 		angvel, self.pd_error = self.pd_controller(theta, myself.angle, self.pd_error, time_diff, PD_Kp, PD_Kd)
-		
 		
 		print "Command: velocity: {0} angvel: {1}".format(velocity, angvel)
 		command = [Command(self.tank_index, velocity, angvel, False)]
@@ -277,7 +303,7 @@ if __name__ == '__main__':
 	bzrc = MyBZRC(host, int(port))
 
 	#Create an agent
-	agent = PFAgent(bzrc, 1)
+	agent = PFAgent(bzrc, 0)
 
 	#Run the agent(s)
 	prev_time = time.time()
