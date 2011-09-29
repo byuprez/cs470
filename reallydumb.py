@@ -3,10 +3,11 @@
 import sys
 import time
 import random
+import math
 from bzrc import BZRC, Command
 
 def enum(**enums):
-    return type('Enum', (), enums)
+	return type('Enum', (), enums)
 
 AgentState = enum(MOVING=1, TURNING=2, STOPPED=3)
 
@@ -37,13 +38,23 @@ class ReallyDumbAgent:
 		#The current goal for our angle, relative to the starting angle of our turn
 		self.cur_ang_goal = 0
 		
+	def normalize_angle(self, angle):
+		"""Make any angle be between +/- pi."""
+		angle -= 2 * math.pi * int (angle / (2 * math.pi))
+		if angle <= -math.pi:
+			angle += 2 * math.pi
+		elif angle > math.pi:
+			angle -= 2 * math.pi
+		return angle
 	
 	#Applies a PD controller to a goal, and returns the action and new error.
 	def pdController(self, goal, cur_value, prev_error, dt, kp, kd):
 		#a = kp * (goal - cur_value) + kd * ((goal - cur_value) - prev_error)/dt
 		cur_error = goal - cur_value
+		print "Goal: {0} Cur Val: {1}".format(goal, cur_value)
 		derivative = (cur_error - prev_error) / dt
 		result = (kp * cur_error) + (kd * derivative)
+		print "result: {0}".format(result)
 		return (result, cur_error)
 	
 	#Begins turning
@@ -53,7 +64,8 @@ class ReallyDumbAgent:
 		myself = tank_info[self.tank_index]
 		
 		#Set the goal as my angle + turn goal
-		self.cur_ang_goal = myself.angle + TURN_GOAL
+		self.cur_ang_goal = self.normalize_angle(myself.angle + TURN_GOAL)
+		print "cur angle goal: {0}".format(self.cur_ang_goal)
 		#Reset the error of the pd controller
 		self.angvel_pd_error = 0
 		
@@ -82,8 +94,10 @@ class ReallyDumbAgent:
 		#Run the turn through the PD controller
 		new_angvel, self.angvel_pd_error = self.pdController(self.cur_ang_goal, myself.angle, self.angvel_pd_error, time_diff, self.angvel_pd_kp, self.angvel_pd_kd)
 		
-		if self.angvel_pd_error <= 0.01:
-			#We are close enough to our desired angle.  Stop turning and begin moving forward
+		print "new angvel: {0}".format(new_angvel)
+		
+		if abs(self.angvel_pd_error) <= 0.01:
+			#We are close enough to our desired angle.	Stop turning and begin moving forward
 			self.begin_forward_movement()
 		else:
 			#Set the angular velocity to the new value returned by the PD controller
