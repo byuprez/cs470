@@ -83,7 +83,7 @@ class EnemyTank(FieldGenerator):
         self.pos_y = tank.y
         self.radius = radius
         #These variables can be used for frobbing the field
-        self.spread = 100
+        self.spread = 80
         self.alpha = 0 #Attractive field strength
         self.beta = .5 #Repulsive field strength
         self.gamma = .5 #Tangential field strength

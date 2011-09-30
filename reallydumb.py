@@ -148,14 +148,16 @@ def main():
 	bzrc = BZRC(host, int(port))
 	
 	#Create an agent and begin the game loop
-	agent = ReallyDumbAgent(bzrc, 0)
+	agent1 = ReallyDumbAgent(bzrc, 0)
+	agent2 = ReallyDumbAgent(bzrc, 1)
 	
 	prev_time = time.time()
 	try:
 		while True:
 			cur_time = time.time()
 			time_diff = cur_time - prev_time
-			agent.tick(time_diff)
+			agent1.tick(time_diff)
+			agent2.tick(time_diff)
 			prev_time = cur_time
 	except KeyboardInterrupt:
 		print "Exiting due to keyboard interrupt."
