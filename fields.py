@@ -44,7 +44,7 @@ FILENAME = 'fields.gpi'
 # Size of the world (one of the "constants" in bzflag):
 WORLDSIZE = 800
 # How many samples to take along each dimension:
-SAMPLES = 25
+SAMPLES = 75
 # Change spacing by changing the relative length of the vectors.  It looks
 # like scaling by 0.75 is pretty good, but this is adjustable:
 VEC_LEN = 0.75 * WORLDSIZE / SAMPLES
@@ -105,17 +105,32 @@ def draw_line(p1, p2):
     x2, y2 = p2
     return 'set arrow from %s, %s to %s, %s nohead lt 3\n' % (x1, y1, x2, y2)
 
+def draw_object(obj):
+    s = ""
+    last_point = obj[0]
+    for cur_point in obj[1:]:
+        s += draw_line(last_point, cur_point)
+        last_point = cur_point
+    s += draw_line(last_point, obj[0])
+
+    return s
+
 def draw_obstacles(obstacles):
     '''Return a string which tells Gnuplot to draw all of the obstacles.'''
     s = 'unset arrow\n'
 
     for obs in obstacles:
-        last_point = obs[0]
-        for cur_point in obs[1:]:
-            s += draw_line(last_point, cur_point)
-            last_point = cur_point
-        s += draw_line(last_point, obs[0])
+        s += draw_object(obs)
     return s
+
+def draw_bases(bases):
+
+    s = ''
+    for b in bases:
+        points = ((b.corner1_x, b.corner1_y), (b.corner2_x, b.corner2_y), (b.corner3_x, b.corner3_y), (b.corner4_x, b.corner4_y))
+        s += draw_object(points)
+    return s
+
 
 def plot_field(function):
     '''Return a Gnuplot command to plot a field.'''
@@ -151,30 +166,28 @@ print >>outfile, plot_field(field_function)
 
 ########################################################################
 # Animate a changing field, if the Python Gnuplot library is present
+try:
+    from Gnuplot import GnuplotProcess
+except ImportError:
+    print "Sorry.  You don't have the Gnuplot module installed."
+    import sys
+    sys.exit(-1)
 
-def plot(caller):
+def plot(caller, func):
 
-    try:
-        from Gnuplot import GnuplotProcess
-    except ImportError:
-        print "Sorry.  You don't have the Gnuplot module installed."
-        import sys
-        sys.exit(-1)
-
+    gp = GnuplotProcess(persist=True)
     forward_list = list(linspace(ANIMATION_MIN, ANIMATION_MAX, ANIMATION_FRAMES/2))
     backward_list = list(linspace(ANIMATION_MAX, ANIMATION_MIN, ANIMATION_FRAMES/2))
     anim_points = forward_list + backward_list
 
-    gp = GnuplotProcess(persist=False)
     gp.write(gnuplot_header(-WORLDSIZE / 2, WORLDSIZE / 2))
-    gp.write(draw_obstacles(OBSTACLES))
 
-    import time
-    for scale in cycle(anim_points):
-        field_function = caller.generate_field_function(scale)
-        #field_function = generate_field_function(scale)
-        gp.write(plot_field(field_function))
-        time.sleep(1)
+    gp.write(draw_obstacles(caller.obstacles))
+    gp.write(draw_bases(caller.bases))
+
+    field_function = func() #caller.generate_field_function(1)
+    #field_function = generate_field_function(scale)
+    gp.write(plot_field(field_function))
 
 #plot()
 # vim: et sw=4 sts=4

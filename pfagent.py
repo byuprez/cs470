@@ -4,6 +4,25 @@ import sys, math, time
 from mybzrc import MyBZRC, Command
 from fields import plot
 
+from Bag import Bag
+
+class mask:
+    mytanks     = 0
+    othertanks  = 1 << 0
+    flags       = 1 << 1
+    bases       = 1 << 2
+    obstacles   = 1 << 3
+    shots       = 1 << 4
+    attractive  = 1 << 5
+    repulsive   = 1 << 6
+    tangential  = 1 << 7
+    all         = sys.maxint
+
+
+config = None
+
+agent = None
+
 class BZRException(Exception): pass
 
 #Variables for frobbing the PD controller
@@ -14,8 +33,9 @@ PD_Kd = 2
 #like a flag, enemy tank, bullet, etc.
 class FieldGenerator:
     #Generates a field for the given x,y position
-    def generate_field(self, x, y):
+    def generate_field(self, x, y, m=mask.all):
         pass
+
         
     def calc_dist(self, x, y, goal_x, goal_y):
         return math.sqrt((goal_x - x)**2 + (goal_y - y)**2)
@@ -89,10 +109,20 @@ class EnemyTank(FieldGenerator):
         self.beta = .5 #Repulsive field strength
         self.gamma = .5 #Tangential field strength
         
-    def generate_field(self, x, y):
-        repulsive_x, repulsive_y = self.generate_repulsive(x,y,self.pos_x,self.pos_y,self.beta,self.radius, self.spread)
-        tangential_x, tangential_y = self.generate_tangential(x,y,self.pos_x,self.pos_y,self.gamma,self.radius, self.spread)
+    def generate_field(self, x, y, m=mask.all):
+        repulsive_x, repulsive_y = self.generate_repulsive(x,y,self.pos_x,self.pos_y,config.EnemyTank.beta,self.radius, config.EnemyTank.spread)
+        tangential_x, tangential_y = self.generate_tangential(x,y,self.pos_x,self.pos_y,config.EnemyTank.gamma,self.radius, config.EnemyTank.spread)
         
+        retX = 0
+        retY = 0
+        if m & mask.repulsive:
+            retX += repulsive_x
+            retY += repulsive_y
+        if m & mask.tangential:
+            retX += tangential_x
+            retY += tangential_y
+        return retX, retY
+
         return (repulsive_x + tangential_x), (repulsive_y + tangential_y) 
         
         
@@ -109,10 +139,19 @@ class FriendlyTank(FieldGenerator):
         self.beta = .5 #Repulsive field strength
         self.gamma = 1 #Tangential field strength
         
-    def generate_field(self, x, y):
-        repulsive_x, repulsive_y = self.generate_repulsive(x,y,self.pos_x,self.pos_y,self.beta,self.radius, self.spread)
-        tangential_x, tangential_y = self.generate_tangential(x,y,self.pos_x,self.pos_y,self.gamma,self.radius, self.spread)
-
+    def generate_field(self, x, y, m=mask.all):
+        repulsive_x, repulsive_y = self.generate_repulsive(x,y,self.pos_x,self.pos_y,config.FriendlyTank.beta,self.radius, config.FriendlyTank.spread)
+        tangential_x, tangential_y = self.generate_tangential(x,y,self.pos_x,self.pos_y,config.FriendlyTank.gamma,self.radius, config.FriendlyTank.spread)
+        
+        retX = 0
+        retY = 0
+        if m & mask.repulsive:
+            retX += repulsive_x
+            retY += repulsive_y
+        if m & mask.tangential:
+            retX += tangential_x
+            retY += tangential_y
+        return retX, retY
         return (repulsive_x + tangential_x), (repulsive_y + tangential_y)
         
         
@@ -132,7 +171,7 @@ class EnemyBase(FieldGenerator):
         self.beta = 0 #Repulsive field strength
         self.gamma = 0 #Tangential field strength
         
-    def generate_field(self, x, y):
+    def generate_field(self, x, y, m=mask.all):
         return 0,0
         
         
@@ -150,7 +189,7 @@ class FriendlyBase(FieldGenerator):
         self.spread = 10
         self.alpha = 1 #Attractive field strength
         
-    def generate_field(self, x, y):
+    def generate_field(self, x, y, m=mask.all):
         #Calculate the center of the base and its width
         width = self.corner1_x - self.corner4_x
         height = self.corner1_y - self.corner2_y
@@ -159,8 +198,10 @@ class FriendlyBase(FieldGenerator):
         #
         radius = (min(width,height) / 2)
         
-        return self.generate_attractive(x, y ,center_x, center_y, self.alpha, radius, self.spread)
+        if m & mask.attractive:
+            return self.generate_attractive(x, y ,center_x, center_y, config.FriendlyBase.alpha, radius, config.FriendlyBase.spread)
         
+        return 0, 0
         
 class EnemyFlag(FieldGenerator):
     def __init__(self, flag, radius):
@@ -172,8 +213,10 @@ class EnemyFlag(FieldGenerator):
         self.spread = 50
         self.alpha = 1 #Attractive field strength
         
-    def generate_field(self, x, y):
-        return self.generate_attractive(x, y, self.pos_x, self.pos_y, self.alpha, self.radius, self.spread)
+    def generate_field(self, x, y, m=mask.all):
+        if m & mask.attractive:
+            return self.generate_attractive(x, y, self.pos_x, self.pos_y, config.EnemyFlag.alpha, self.radius, config.EnemyFlag.spread)
+        return 0, 0
         
         
 class FriendlyFlag(FieldGenerator):
@@ -188,7 +231,7 @@ class FriendlyFlag(FieldGenerator):
         self.beta = 0 #Repulsive field strength
         self.gamma = 0 #Tangential field strength
         
-    def generate_field(self, x, y):
+    def generate_field(self, x, y, m=mask.all):
         return 0,0
         
         
@@ -203,9 +246,19 @@ class Shot(FieldGenerator):
         self.beta = 100 #Repulsive field strength
         self.gamma = 1 #Tangential field strength
         
-    def generate_field(self, x, y):
-        repulsive_x, repulsive_y = self.generate_repulsive(x,y,self.pos_x,self.pos_y,self.beta,self.radius, self.spread)
-        tangential_x, tangential_y = self.generate_tangential(x,y,self.pos_x,self.pos_y,self.gamma,self.radius, self.spread)
+    def generate_field(self, x, y, m=mask.all):
+        repulsive_x, repulsive_y = self.generate_repulsive(x,y,self.pos_x,self.pos_y,config.Shot.beta,self.radius, config.Shot.spread)
+        tangential_x, tangential_y = self.generate_tangential(x,y,self.pos_x,self.pos_y,config.Shot.gamma,self.radius, config.Shot.spread)
+
+        retX = 0
+        retY = 0
+        if m & mask.repulsive:
+            retX += repulsive_x
+            retY += repulsive_y
+        if m & mask.tangential:
+            retX += tangential_x
+            retY += tangential_y
+        return retX, retY
 
         return (repulsive_x + tangential_x), (repulsive_y + tangential_y)
         
@@ -214,12 +267,12 @@ class Obstacle(FieldGenerator):
     def __init__(self, obstacle):
         self.corners = obstacle
         #These variables can be used for frobbing the field
-        self.radius = 50
-        self.spread = 10
+        self.radius = 100
+        self.spread = 100
         self.beta = .5 #Repulsive field strength
         self.gamma = .3 #Tangential field strength
         
-    def generate_field(self, x, y):
+    def generate_field(self, x, y, m=mask.all):
         return_x = 0
         return_y = 0
         
@@ -248,14 +301,20 @@ class Obstacle(FieldGenerator):
                 
             width = max_x - min_x
             height = max_y - min_y
-            radius = max(width, height)
+            radius = max(width, height) / 2
             center_x = min_x + (width / 2)
             center_y = min_y + (height / 2)
         
-            repulsive_x, repulsive_y = self.generate_repulsive(x,y,center_x,center_y,self.beta,radius, self.spread)
-            tangential_x, tangential_y = self.generate_tangential(x,y,center_x,center_y,self.gamma,radius, self.spread)
-            return_x += repulsive_x + tangential_x
-            return_y += repulsive_y + tangential_y
+            repulsive_x, repulsive_y = self.generate_repulsive(x,y,center_x,center_y,config.Obstacle.beta,radius, config.Obstacle.spread)
+            tangential_x, tangential_y = self.generate_tangential(x,y,center_x,center_y,config.Obstacle.gamma,radius, config.Obstacle.spread)
+            #return_x += repulsive_x + tangential_x
+            #return_y += repulsive_y + tangential_y
+            if m & mask.repulsive:
+                return_x += repulsive_x
+                return_y += repulsive_y
+            if m & mask.tangential:
+                return_x += tangential_x
+                return_y += tangential_y
         
         return return_x, return_y
 
@@ -267,8 +326,18 @@ class PFAgent:
         self.constants = self.bzrc.get_constants()
         self.commands = []
         self.tank_index = index
+        global config
+        config = Bag.FromJSON(open('config.py').read())
         
         print "Game constants: {0}".format(self.constants)
+
+        mytanks, othertanks, flags, bases, obstacles, shots = self.bzrc.get_lots_o_stuff()
+        self.flags = flags
+        self.obstacles = obstacles
+        self.shots = shots
+        self.bases = bases
+        self.mytanks = mytanks
+        self.othertanks = othertanks
         
         #The only internal state that we are allowed to keep is the "previous" error for the PD controller
         self.angvel_pd_error = 0
@@ -312,8 +381,8 @@ class PFAgent:
     #For example, an "Avoid enemy" behavior is implemented by adding in an EnemyTank field generator for
     #each enemy tank
     def generate_field_function(self, scale):
-        field_generators = self.create_field_generators()
-        self.run = False
+        #field_generators = self.create_field_generators(mytanks=self.mytanks, othertanks=self.othertanks, flags=self.flags, bases=self.bases, obstacles=self.obstacles, shots=self.shots)
+        field_generators = self.create_field_generators(mytanks=self.mytanks, flags=self.flags, obstacles=self.obstacles)
         def function(x, y):
             '''User-defined field function.'''
             field_x = 0
@@ -326,12 +395,41 @@ class PFAgent:
             return field_x, field_y
         return function
 
+    def plot(self, m):
+        ''' '''
+        field_generators = self.create_field_generators(m)
+        def create():
+            def func(x, y):
+                field_x = 0
+                field_y = 0
+                for field_generator in field_generators:
+                    delta_x, delta_y = field_generator.generate_field(x,y,m)
+                    field_x += delta_x
+                    field_y += delta_y
+
+                return field_x, field_y
+            return func
+        plot(self, create)
+
     def calculate_pf(self, x, y):
         field_x = 0
         field_y = 0
-        field_generators = self.create_field_generators()
+
+        mytanks, othertanks, flags, bases, obstacles, shots = self.bzrc.get_lots_o_stuff()
+        self.flags = flags
+        self.obstacles = obstacles
+        self.shots = shots
+        self.bases = bases
+        self.mytanks = mytanks
+        self.othertanks = othertanks
+        #field_generators = self.create_field_generators(mytanks=mytanks, othertanks=othertanks, flags=flags, bases=bases, obstacles=obstacles, shots=shots)
+        #field_generators = self.create_field_generators(mytanks=self.mytanks, flags=self.flags, obstacles=self.obstacles)
+        field_generators = self.create_field_generators(mask.all)
+        global config
+        config = Bag.FromJSON(open('config.py').read())
+        #self.plot(mask.all)
         #plot(self)
-        
+
         for field_generator in field_generators:
             delta_x, delta_y = field_generator.generate_field(x,y)
             field_x += delta_x
@@ -341,45 +439,47 @@ class PFAgent:
             
         
     #Creates a list of field generators that will produce the potential fields
-    def create_field_generators(self):
+    def create_field_generators(self, m):
         #Get all the information about the world available
-        mytanks, othertanks, flags, bases, obstacles, shots = self.bzrc.get_lots_o_stuff()
-        myself = mytanks[self.tank_index]
         sub_fields = []
-        
-        #Seek goal behavior differs if we are holding the flag
-        if myself.flag != "-":
-            #I am holding a flag.  Set the goal to return to my base by creating a FriendlyBase field generator
-            for base in bases:
-                if base.color == self.constants['team']:
-                    sub_fields.append(FriendlyBase(base))
-                    break
-
-        else:
-            #I don't have a flag.  Set the goal to be an enemy flag by creating a EnemyFlag field generator for
-            #each enemy flag
-            for flag in flags:
-                #if flag.color != self.constants['team']:
-                if flag.color == "green":
-                    sub_fields.append(EnemyFlag(flag, float(self.constants['flagradius'])))
-                    
+        if m & (mask.mytanks | mask.flags):
+            myself = self.mytanks[self.tank_index]
+            
+            #Seek goal behavior differs if we are holding the flag
+            if myself.flag != "-":
+                #I am holding a flag.  Set the goal to return to my base by creating a FriendlyBase field generator
+                for base in self.bases:
+                    if base.color == self.constants['team']:
+                        sub_fields.append(FriendlyBase(base))
+                        break
+            else:
+                #I don't have a flag.  Set the goal to be an enemy flag by creating a EnemyFlag field generator for
+                #each enemy flag
+                for flag in self.flags:
+                    #if flag.color != self.constants['team']:
+                    if flag.color == "green":
+                        sub_fields.append(EnemyFlag(flag, float(self.constants['flagradius'])))
 
         #Add in fields for enemy tanks
-        for tank in othertanks:
-            sub_fields.append(EnemyTank(tank, float(self.constants['tankradius'])))
+        if m & mask.othertanks:
+            for tank in self.othertanks:
+                sub_fields.append(EnemyTank(tank, float(self.constants['tankradius'])))
 
         #Add in fields for friendly tanks
-        for tank in mytanks:
-            if tank.index != self.tank_index:
-                sub_fields.append(FriendlyTank(tank, float(self.constants['tankradius'])))
+        if m & mask.mytanks:
+            for tank in self.mytanks:
+                if tank.index != self.tank_index:
+                    sub_fields.append(FriendlyTank(tank, float(self.constants['tankradius'])))
 
         #Avoid obstacles
-        for obstacle in obstacles:
-            sub_fields.append(Obstacle(obstacle))
+        if m & mask.obstacles:
+            for obstacle in self.obstacles:
+                sub_fields.append(Obstacle(obstacle))
 
         #Avoid shots
-        for shot in shots:
-            sub_fields.append(Shot(shot, float(self.constants['shotradius'])))
+        if m & mask.shots:
+            for shot in self.shots:
+                sub_fields.append(Shot(shot, float(self.constants['shotradius'])))
 
         return sub_fields   
         
@@ -396,35 +496,43 @@ class PFAgent:
         #Run the angle through a pd controller to get angular velocity
         angvel, self.angvel_pd_error = self.pd_controller(theta, myself.angle, self.angvel_pd_error, time_diff, PD_Kp, PD_Kd)
         
-        print "Command: velocity: {0} angvel: {1}".format(velocity, angvel)
+        #print "Command: velocity: {0} angvel: {1}".format(velocity, angvel)
         command = [Command(self.tank_index, velocity, angvel, False)]
         self.bzrc.do_commands(command)
 
 if __name__ == '__main__':
     # Process CLI arguments.
+    interactive = False
+    print sys.argv
     try:
-        execname, host, port = sys.argv
+        if len(sys.argv) == 3:
+            execname, host, port = sys.argv
+        else:
+            execname, host, port, interactive = sys.argv
     except ValueError:
+        pass
         execname = sys.argv[0]
         print >>sys.stderr, '%s: incorrect number of arguments' % execname
         print >>sys.stderr, 'usage: %s hostname port' % sys.argv[0]
         sys.exit(-1)
+    print 'blah', execname, host, port, interactive
 
     # Connect.
     #bzrc = MyBZRC(host, int(port), debug=True)
     bzrc = MyBZRC(host, int(port))
 
     #Create an agent
+    global agent
     agent = PFAgent(bzrc, 0)
 
-    #Run the agent(s)
-    prev_time = time.time()
-    try:
-        while True:
-            cur_time = time.time()
-            time_diff = cur_time - prev_time
-            agent.tick(time_diff)
-            prev_time = cur_time
-    except KeyboardInterrupt:
-        print "Exiting due to keyboard interrupt."
-    
+    if not interactive:
+        #Run the agent(s)
+        prev_time = time.time()
+        try:
+            while True:
+                cur_time = time.time()
+                time_diff = cur_time - prev_time
+                agent.tick(time_diff)
+                prev_time = cur_time
+        except KeyboardInterrupt:
+            print "Exiting due to keyboard interrupt."
