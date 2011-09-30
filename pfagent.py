@@ -4,6 +4,7 @@ import sys
 import math
 import time
 from mybzrc import MyBZRC, Command
+from fields import plot
 
 class BZRException(Exception): pass
 
@@ -241,10 +242,26 @@ class PFAgent:
     #appropriate behaviors are implemented by adding field generators for the desired objects of the world.
     #For example, an "Avoid enemy" behavior is implemented by adding in an EnemyTank field generator for
     #each enemy tank
+    def generate_field_function(self, scale):
+        field_generators = self.create_field_generators()
+        self.run = False
+        def function(x, y):
+            '''User-defined field function.'''
+            field_x = 0
+            field_y = 0
+            for field_generator in field_generators:
+                delta_x, delta_y = field_generator.generate_field(x,y)
+                field_x += delta_x
+                field_y += delta_y
+
+            return field_x, field_y
+        return function
+
     def calculate_pf(self, x, y):
         field_x = 0
         field_y = 0
         field_generators = self.create_field_generators()
+        plot(self)
         
         for field_generator in field_generators:
             delta_x, delta_y = field_generator.generate_field(x,y)
