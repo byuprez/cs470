@@ -223,13 +223,39 @@ class Obstacle(FieldGenerator):
         return_x = 0
         return_y = 0
         
-        #For each corner of the obstacle, create a tangential field
+        '''#For each corner of the obstacle, create a tangential field
         #to direct the agent around the obstacle
         for corner in self.corners:
             repulsive_x, repulsive_y = self.generate_repulsive(x,y,corner[0],corner[1],self.beta,self.radius, self.spread)
             tangential_x, tangential_y = self.generate_tangential(x,y,corner[0],corner[1],self.gamma,self.radius, self.spread)
             return_x += repulsive_x + tangential_x
-            return_y += repulsive_y + repulsive_y
+            return_y += repulsive_y + tangential_y'''
+            
+        #Construct a circle around the obstacle
+        max_x = float("-inf")
+        max_y = float("-inf")
+        min_x = float("inf")
+        min_y = float("inf")
+        for corner in self.corners:
+            if corner[0] > max_x:
+                max_x = corner[0]
+            if corner[1] > max_y:
+                max_y = corner[1]
+            if corner[0] < min_x:
+                min_x = corner[0]
+            if corner[1] < min_y:
+                min_y = corner[1]
+                
+            width = max_x - min_x
+            height = max_y - min_y
+            radius = max(width, height)
+            center_x = min_x + (width / 2)
+            center_y = min_y + (height / 2)
+        
+            repulsive_x, repulsive_y = self.generate_repulsive(x,y,center_x,center_y,self.beta,radius, self.spread)
+            tangential_x, tangential_y = self.generate_tangential(x,y,center_x,center_y,self.gamma,radius, self.spread)
+            return_x += repulsive_x + tangential_x
+            return_y += repulsive_y + tangential_y
         
         return return_x, return_y
 
@@ -304,7 +330,7 @@ class PFAgent:
         field_x = 0
         field_y = 0
         field_generators = self.create_field_generators()
-        plot(self)
+        #plot(self)
         
         for field_generator in field_generators:
             delta_x, delta_y = field_generator.generate_field(x,y)
@@ -333,7 +359,8 @@ class PFAgent:
             #I don't have a flag.  Set the goal to be an enemy flag by creating a EnemyFlag field generator for
             #each enemy flag
             for flag in flags:
-                if flag.color != self.constants['team']:
+                #if flag.color != self.constants['team']:
+                if flag.color == "green":
                     sub_fields.append(EnemyFlag(flag, float(self.constants['flagradius'])))
                     
 
