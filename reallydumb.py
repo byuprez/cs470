@@ -28,6 +28,7 @@ class ReallyDumbAgent:
 		self.forward_time = 0
 		self.forward_time_limit = random.randint(3,8)
 		self.fire_time = 0
+		self.fire_time_limit = 1.5 + random.random()
 		
 		#Constants for applying a PD controller to our angular velocity
 		self.angvel_pd_kp = 5
@@ -50,7 +51,7 @@ class ReallyDumbAgent:
 	#Applies a PD controller to a goal, and returns the action and new error.
 	def pdController(self, goal, cur_value, prev_error, dt, kp, kd):
 		#a = kp * (goal - cur_value) + kd * ((goal - cur_value) - prev_error)/dt
-		cur_error = goal - cur_value
+		cur_error = self.normalize_angle(goal - cur_value)
 		print "Goal: {0} Cur Val: {1}".format(goal, cur_value)
 		derivative = (cur_error - prev_error) / dt
 		result = (kp * cur_error) + (kd * derivative)
@@ -64,7 +65,7 @@ class ReallyDumbAgent:
 		myself = tank_info[self.tank_index]
 		
 		#Set the goal as my angle + turn goal
-		self.cur_ang_goal = self.normalize_angle(myself.angle + TURN_GOAL)
+		self.cur_ang_goal = myself.angle + TURN_GOAL
 		print "cur angle goal: {0}".format(self.cur_ang_goal)
 		#Reset the error of the pd controller
 		self.angvel_pd_error = 0
@@ -128,6 +129,7 @@ class ReallyDumbAgent:
 			print "Fire"
 			self.bzrc.shoot(self.tank_index)
 			self.fire_time = 0
+			self.fire_time_limit = 1.5 + random.random()
 		else:
 			self.fire_time += time_diff
 			
@@ -146,7 +148,7 @@ def main():
 	bzrc = BZRC(host, int(port))
 	
 	#Create an agent and begin the game loop
-	agent = ReallyDumbAgent(bzrc, 8)
+	agent = ReallyDumbAgent(bzrc, 0)
 	
 	prev_time = time.time()
 	try:
