@@ -316,9 +316,8 @@ class PFAgent:
             #I don't have a flag.  Set the goal to be an enemy flag by creating a EnemyFlag field generator for
             #each enemy flag
             for flag in flags:
-                if flag.color == "blue":
+                if flag.color != self.constants['team']:
                     sub_fields.append(EnemyFlag(flag, float(self.constants['flagradius'])))
-                    break
                     
 
         #Add in fields for enemy tanks
